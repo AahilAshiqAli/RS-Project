@@ -44,6 +44,8 @@ df=pd.read_csv('AniMate_Model/rating_data.csv', low_memory=True)
 @app.route('/')
 def home():
     return render_template('index.html')
+
+# User based function
 def find_similar_users(item_input, n=10, return_dist=False, neg=False):
     try:
         index = item_input
@@ -71,6 +73,7 @@ def find_similar_users(item_input, n=10, return_dist=False, neg=False):
     except:
         print('\033[1m{}\033[0m, Not Found in User list'.format(item_input))
 
+# User based function
 def get_user_preferences(user_id):
     # uses rating data inside df to get all anime's user has rated
     animes_watched_by_user = df[df['user_id'] == user_id]
@@ -91,6 +94,7 @@ def get_user_preferences(user_id):
     # returns those top picked animes by user as user preferences
     return anime_df_rows
 
+# User based function
 def get_recommended_animes(similar_users, user_pref, n=10):
     # function is to recommend animes based on what similar users have liked but only those which user has not watched yet
     # user pref comes from above function and reresents all top animes user has watched
@@ -185,15 +189,25 @@ def get_recommended_animes(similar_users, user_pref, n=10):
             except:
                 pass
     #recommended animes has info about all animes we calculated in sorted_list.
-    
+
     return pd.DataFrame(recommended_animes)
+
+# Item based function
+# the function finds and returns a list of anime titles similar to a given anime
 def find_similar_animes(name, n=10, return_dist=False, neg=False):
     try:
+        # Get the row of the anime that matches the given name
         anime_row = df_anime[df_anime['Name'] == name].iloc[0]
-        index = anime_row['anime_id']
+        index = anime_row['anime_id']  # Extract the anime_id
+
+        # Convert anime_id to encoded index (used in embedding matrix)
         encoded_index = anime_encoder.transform([index])[0]
-        weights = anime_weights
+
+        weights = anime_weights  # Precomputed anime embeddings from the model
+
         dists = np.dot(weights, weights[encoded_index])
+
+         # Get sorted indices based on similarity
         sorted_dists = np.argsort(dists)
         n = n + 1            
         if neg:
@@ -205,7 +219,9 @@ def find_similar_animes(name, n=10, return_dist=False, neg=False):
             return dists, closest
         SimilarityArr = []
         for close in closest:
+            # get the anime_id from the encoded index
             decoded_id = anime_encoder.inverse_transform([close])[0]
+            # get the anime row from decoded id
             anime_frame = df_anime[df_anime['anime_id'] == decoded_id]
             anime_id=anime_frame['anime_id'].values[0]
             anime_image_url = anime_frame['Image URL'].values[0]
@@ -284,11 +300,13 @@ def find_similar_animes(name, n=10, return_dist=False, neg=False):
         return Frame[Frame.Name != name]
     except:
         print('{} not found in Anime list'.format(name))
+
+# main route to recommend animes        
 @app.route('/recommend', methods=['POST'])
 def recommend():
     recommendation_type = request.form['recommendation_type']
     num_recommendations = int(request.form['num_recommendations'])
-
+    # checks recommendation is user based or item based
     if recommendation_type == "user_based":
         user_id = request.form['user_id']
         
@@ -312,9 +330,12 @@ def recommend():
                 message1 = "User with user_id " + str(user_id) + " does not exist in the database."
             return render_template('recommendations.html', message=message1, animes=None, recommendation_type=recommendation_type)
 
+        # filters similar users based on similarity
         similar_user_ids = similar_user_ids[similar_user_ids.similarity > 0.4]
         similar_user_ids = similar_user_ids[similar_user_ids.similar_users != user_id]
+        # according to users similar to user_id, we get user preferences for all similar users
         user_pref = get_user_preferences(user_id)
+        # using animes we get from similar users, we get recommended animes
         recommended_animes = get_recommended_animes(similar_user_ids, user_pref, n=num_recommendations)
         return render_template('recommendations.html', animes=recommended_animes, recommendation_type=recommendation_type)
 
@@ -333,6 +354,8 @@ def recommend():
 
     else:
         return render_template('index.html', error_message="Please select a recommendation type.")
+    
+# autocomplete function for index.html
 @app.route('/autocomplete', methods=['GET'])
 def autocomplete():
     search_term = request.args.get('term')
